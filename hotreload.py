@@ -1,6 +1,6 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
-import sys, os, re, stat, time, signal, argparse, subprocess
+import sys, os, stat, time, signal, argparse, subprocess
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -12,11 +12,11 @@ parser = argparse.ArgumentParser(description=text)
 parser.add_argument('path', metavar='P', type=str, help='Reload path')
 parser.add_argument('arguments', metavar='A', nargs='*', type=str, help='Arguments for reloadable')
 parser.add_argument("-e", "--env-var", nargs='*', type=str, help="Environment variables key=value")
-parser.add_argument("-I", "--Include", nargs='*', type=str, help="Include directory to watch, default='./'")
-parser.add_argument("-wc", "--with-command", type=str, help="Custom command to run with")
+parser.add_argument("-W", "--Watch", nargs='*', type=str, help="Directories to watch, default='./'")
+parser.add_argument("-c", "--command", type=str, help="Custom command to run reloadable with")
 parser.add_argument("-V", "--Version", help="show application version", action="store_true")
-parser.add_argument("-s", "--silent", help="Minimize logging", action="store_true")
-parser.add_argument("-ss", "--super-silent", help="No logs", action="store_true")
+parser.add_argument("-q", "--quiet", help="Log only essential info", action="store_true")
+parser.add_argument("-s", "--silent", help="No logs", action="store_true")
 args = parser.parse_args()
 
 ###
@@ -34,7 +34,7 @@ class styles:
   ENDC = '\033[0m'
 
 def prettyPrint(msg, style=styles.GREEN, loud=False):
-  if args.super_silent or args.silent and not loud:
+  if args.silent or args.quiet and not loud:
     return
   print(style + msg + styles.ENDC)
 
@@ -99,7 +99,7 @@ class Reload(FileSystemEventHandler):
       chmodPrompt(self.path)
     except OSError as e:
       if e.errno != 8: raise e
-      prettyPrint("Failed to execute file with exec error, try adding '#!/usr/local/bin/python3' top of executable file " , styles.CRITICAL, True)
+      prettyPrint("Failed to execute file with exec error, try adding '#!/usr/local/bin/python3' or similar top of executable file " , styles.CRITICAL, True)
 
   def kill(self):
     self.process.kill()
@@ -115,9 +115,9 @@ path = parsePath(args.path)
 arguments = ' '.join(args.arguments)
 env_var = parseEnv(args.env_var)
 paths = ['./']
-command = args.with_command
-if args.Include: 
-  paths = args.Include
+command = args.command
+if args.Watch: 
+  paths = args.Watch
 
 ###
 ## Info
