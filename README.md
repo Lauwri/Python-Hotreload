@@ -1,16 +1,11 @@
 # Python hotreload
 
 It observes file changes in directories and reloads scripts or executables.  
-Written in python, tested only on os x and python 3 but might work on windows
-
-- [Python hotreload](#python-hotreload)
-    - [Installation](#installation)
-    - [Usage](#usage)
-    - [Options](#options)
+Written in python, tested only on os x and python 3 but might work on windows.
 
 ### Installation
 
-For now just put the file in same directory as the script you want to reload  
+For now just put the hotreload.py in same directory as the script you want to reload  
 In case you encounter permission errors, it's possible that hotreload file needs executing rights:
 
 ```
@@ -19,7 +14,8 @@ In case you encounter permission errors, it's possible that hotreload file needs
 
 ### Usage
 
-Hotreload can run scripts with arguments and environment variables
+Hotreload runs scripts with optional arguments and environment variables.  
+For example:
 
 ```
 ./hotreload.py script.py arg1 arg2 -e envK1=envV1 envK2=envV2

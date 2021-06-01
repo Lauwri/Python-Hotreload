@@ -1,6 +1,6 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
-import sys, os, stat, time, signal, argparse, subprocess
+import sys, os, stat, time, argparse, atexit, subprocess
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -56,10 +56,44 @@ def isUnder(dir, dirs):
 
 def chmodPrompt(path):
   prettyPrint("Trying to give +x permission to file:\n%s " % path, styles.WARNING)
-  if input("Are you sure? (y/n)") != "y":
-    return
-  os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-  
+  try:
+    if input("Are you sure? (y/n)") != "y":
+      return False
+    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
+    return True
+  except:
+    return False
+
+###
+## Classes
+###
+class Hotpot:
+  pot = []
+  watchPaths = []
+  reload = None
+
+  def __init__(self, reload, watch = ['./']):
+    self.watchPaths = watch
+    self.reload = reload
+    self.cook()
+
+  def cook(self):
+    if not self.reload or len(self.watchPaths) <= 0:
+      raise Exception("Missing ingredients")
+    for path in self.watchPaths:
+      if isUnder(path, self.watchPaths):
+        break
+      prettyPrint("Creating observer: %s" % path, styles.CYAN)
+      hot = Observer()
+      hot.schedule(self.reload, path, recursive=True)
+      hot.start()
+      hot.join
+      self.pot.append(hot)
+
+  def kill(self):
+    for hot in self.pot:
+      hot.stop()
+
 class Reload(FileSystemEventHandler):
   process = None
   command = None
@@ -71,8 +105,7 @@ class Reload(FileSystemEventHandler):
     self.path = path
     self.arguments = arguments
     self.env_vars = env_vars
-    self.reload()
-    super(Reload, self).__init__()
+    super().__init__()
 
   #System listeners TODO: add listen levels in arguments
   def on_moved(self, event):
@@ -87,37 +120,40 @@ class Reload(FileSystemEventHandler):
   #TODO: Process stdin, stdout and stderr pipe
   def reload(self):
     msg = "Loading"
-    if(self.process):
+    if self.process:
       self.kill()
       msg = "Reloading"
     subArgs = [self.command, self.path, self.arguments] if self.command else [self.path, self.arguments]
     prettyPrint(msg+" script with command: %s" % " ".join(subArgs), styles.WARNING, True)
     try:
       self.process = subprocess.Popen(subArgs, env=self.env_vars)
-    except PermissionError:
+    except PermissionError as e:
       prettyPrint("Failed to execute file with permission error", styles.CRITICAL, True)
-      chmodPrompt(self.path)
+      if not chmodPrompt(self.path): 
+        raise e
     except OSError as e:
-      if e.errno != 8: raise e
+      if e.errno != 8:
+        raise e
       prettyPrint("Failed to execute file with exec error, try adding '#!/usr/local/bin/python3' or similar top of executable file " , styles.CRITICAL, True)
 
   def kill(self):
-    self.process.kill()
+    if self.process:
+      self.process.kill()
 
 ###
 ## Variables
 ###
 if args.Version:
-  prettyPrint("Python hotreloader 1.0", styles.BOLD, True)
+  prettyPrint("Python hotreload 1.0", styles.BOLD, True)
   sys.exit(1)
 
 path = parsePath(args.path)
 arguments = ' '.join(args.arguments)
 env_var = parseEnv(args.env_var)
-paths = ['./']
+watchPaths = ['./']
 command = args.command
 if args.Watch: 
-  paths = args.Watch
+  watchPaths = args.Watch
 
 ###
 ## Info
@@ -127,38 +163,24 @@ prettyPrint("Reload full path: %s" % path, styles.CYAN)
 if command: prettyPrint("Custom command: %s" % command)
 prettyPrint("With arguments: %s" % arguments)
 prettyPrint("With environment variables: %s" % env_var)
-prettyPrint("Watching paths: %s" % paths)
+prettyPrint("Watching paths: %s" % watchPaths)
 
 ###
 ## Hotreload
 ###
-pot = []
 reload = Reload(path, arguments, env_var, command)
-for path in paths:
-  if isUnder(path, paths):
-    break
-  prettyPrint("Creating observer: %s" % path, styles.CYAN)
-  hot = Observer()
-  hot.schedule(reload, path, recursive=True)
-  hot.start()
-  hot.join
-  pot.append(hot)
+hotpot = Hotpot(reload, watchPaths)
 
-cold = False
-def signalKiller(signum,frame):
-  global cold
-  cold = True
-signal.signal(signal.SIGINT, signalKiller)
-
-def gracefulExit():
-  if reload:
-    reload.kill()
-  for hot in pot:
-    hot.stop()
+def gracefulExit(signum=None,frame=None):
+  reload.kill()
+  hotpot.kill()
   prettyPrint("Graceful exit", styles.CYAN, True)
 
-while True:
-  time.sleep(1)
-  if cold:
-    gracefulExit()
-    break
+atexit.register(gracefulExit)
+reload.reload()
+
+try:
+  while True:
+    time.sleep(1)
+except KeyboardInterrupt:
+  prettyPrint("Good bye!", styles.BLUE)
