@@ -1,22 +1,25 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
-import sys, os, stat, time, argparse, atexit, subprocess
+import os, atexit, stat, time, argparse, subprocess
+import signal
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+VERSION ="1.0.1"
+VERSION_TXT = "\033[95mPython hotreload %s\033[0m" % VERSION
 
 ###
 ## Arguments
 ###
-text="Python hotreload"
-parser = argparse.ArgumentParser(description=text)
-parser.add_argument('path', metavar='P', type=str, help='Reload path')
-parser.add_argument('arguments', metavar='A', nargs='*', type=str, help='Arguments for reloadable')
+parser = argparse.ArgumentParser(description=VERSION_TXT)
+parser.add_argument('path', type=str, help='Reload path')
+parser.add_argument('arguments', nargs='*', type=str, help='Optional arguments for reloadable')
 parser.add_argument("-e", "--env-var", nargs='*', type=str, help="Environment variables key=value")
-parser.add_argument("-W", "--Watch", nargs='*', type=str, help="Directories to watch, default='./'")
+parser.add_argument("-W", "--watch", nargs='*', type=str, help="Directories to watch, default='./'")
 parser.add_argument("-c", "--command", type=str, help="Custom command to run reloadable with")
-parser.add_argument("-V", "--Version", help="show application version", action="store_true")
-parser.add_argument("-q", "--quiet", help="Log only essential info", action="store_true")
-parser.add_argument("-s", "--silent", help="No logs", action="store_true")
+parser.add_argument("-V", "--version", help="Display application version", action='version', version=VERSION_TXT)
+parser.add_argument("-q", "--quiet", help="Log only essential info")
+parser.add_argument("-s", "--silent", help="No logs")
 args = parser.parse_args()
 
 ###
@@ -132,9 +135,9 @@ class Reload(FileSystemEventHandler):
       if not chmodPrompt(self.path): 
         raise e
     except OSError as e:
-      if e.errno != 8:
-        raise e
-      prettyPrint("Failed to execute file with exec error, try adding '#!/usr/local/bin/python3' or similar top of executable file " , styles.CRITICAL, True)
+      if e.errno == 8:
+        prettyPrint("Failed to execute file with exec error, try adding '#!/usr/local/bin/python3' or similar top of executable file " , styles.CRITICAL, True)
+      raise e
 
   def kill(self):
     if self.process:
@@ -143,22 +146,18 @@ class Reload(FileSystemEventHandler):
 ###
 ## Variables
 ###
-if args.Version:
-  prettyPrint("Python hotreload 1.0", styles.BOLD, True)
-  sys.exit(1)
-
 path = parsePath(args.path)
 arguments = ' '.join(args.arguments)
 env_var = parseEnv(args.env_var)
 watchPaths = ['./']
 command = args.command
-if args.Watch: 
-  watchPaths = args.Watch
+if args.watch: 
+  watchPaths = args.watch
 
 ###
 ## Info
 ###
-prettyPrint("*** Python hotreloader 1.0 ***", styles.HEADER)
+prettyPrint("*** Python hotreload %s ***" % VERSION, styles.HEADER)
 prettyPrint("Reload full path: %s" % path, styles.CYAN)
 if command: prettyPrint("Custom command: %s" % command)
 prettyPrint("With arguments: %s" % arguments)
@@ -171,16 +170,24 @@ prettyPrint("Watching paths: %s" % watchPaths)
 reload = Reload(path, arguments, env_var, command)
 hotpot = Hotpot(reload, watchPaths)
 
+run = True
+
 def gracefulExit(signum=None,frame=None):
+  global run
+  if not run: return
+  run = False
   reload.kill()
   hotpot.kill()
   prettyPrint("Graceful exit", styles.CYAN, True)
+  exit(0)
 
 atexit.register(gracefulExit)
+signal.signal(signal.SIGTERM, gracefulExit)
+signal.signal(signal.SIGTSTP, gracefulExit)
 reload.reload()
 
 try:
-  while True:
+  while run:
     time.sleep(1)
 except KeyboardInterrupt:
-  prettyPrint("Good bye!", styles.BLUE)
+  prettyPrint("Goodbye!", styles.BLUE)
